@@ -1,0 +1,340 @@
+'VBA Data Modeler
+
+' v1  -- functional.  able to generate AP Bills with dimension controls
+'v1.1 -- added addl info tab. control year, currency, doc number
+'v1.11-- added table clear before running
+'v1.12-- added documentation/renamed file
+'v1.13-- UNSTABLE - added combobox on seasonality, does not work
+
+Dim Dept As String, DeptEff As String, Loc As String, LocEff As String
+Dim iDept As Integer, iLoc As Integer
+Dim Vend As String, VendName As String, Acct As String, AcctEff As String
+Dim iAcct As Integer
+Dim iPasteValues As Integer
+Dim LastRow As Long
+Dim wksDI As Worksheet, wksLoc As Worksheet, wksDept As Worksheet, wksDT As Worksheet
+Public DTLength As Integer
+
+Sub CallSubs()
+
+Terfuge
+
+ClearPrev
+
+SetInitialValues
+
+DTLength = iPasteValues
+
+CalcAuto
+
+FillFormulas
+
+CalcMan
+
+GetCSVValues
+
+CalcAuto
+
+CopyToCSV
+
+End Sub
+
+Sub Terfuge()
+
+'clean up runtime
+
+CalcMan
+
+    If Application.DisplayAlerts Then
+    
+        Application.DisplayAlerts = False
+        
+    Else
+    
+        Application.DisplayAlerts = True
+        
+    End If
+    
+End Sub
+
+Sub ClearPrev()
+
+Set wksDT = ThisWorkbook.Worksheets("Data Table") 'set DT wks
+
+Set wksCSV = ThisWorkbook.Worksheets("CSV_File") 'set CSV wks
+
+wksCSV.Range("A3:N" & Rows.Count).ClearContents 'clear CSV tab
+
+wksDT.Range("B3:V" & Rows.Count).ClearContents 'clear data table tab
+
+End Sub
+
+Sub SetInitialValues()
+
+iPasteValues = 2 'sets data table first row
+
+GetLoc
+
+End Sub
+
+Sub GetLoc() 'get Location values from Location tab
+
+    Set wksLoc = ThisWorkbook.Worksheets("Dimension - Loc") 'sets worksheet
+
+    rLoc = wksLoc.Range("h" & Rows.Count).End(xlUp).Row 'sets loc row
+    
+    For iLoc = 9 To rLoc 'first row to last
+    
+        If wksLoc.Range("J" & iLoc).Value <> 0 Then 'skip zeros
+        
+            Loc = wksLoc.Range("h" & iLoc).Value 'sets loc ID value
+            LocEff = wksLoc.Range("j" & iLoc).Value 'sets loc %
+        
+            GetDept  'move to next step
+        
+        Else
+        
+        End If
+        
+    Next iLoc ' move to next row
+        
+End Sub
+
+Sub GetDept()
+
+'get dept values from department tab
+
+    Set wksDept = ThisWorkbook.Worksheets("Dimension - Dept") 'sets worksheet
+
+    rDept = wksDept.Range("h" & Rows.Count).End(xlUp).Row 'sets dept row
+    
+    For iDept = 9 To rDept 'first row to last
+    
+        If wksDept.Range("J" & iDept).Value <> 0 Then 'skip zeros
+        
+            Dept = wksDept.Range("h" & iDept).Value 'sets Dept ID value
+            DeptEff = wksDept.Range("j" & iDept).Value 'sets Dept %
+        
+            GetDataValues  'move to next step
+        
+        Else
+        
+        End If
+        
+    Next iDept ' move to next row
+           
+End Sub
+
+Sub GetDataValues()
+
+'get Data values from Data Input tab
+
+    Set wksDI = ThisWorkbook.Worksheets("Data Input") 'sets worksheet
+
+    rAcct = wksDI.Range("J" & Rows.Count).End(xlUp).Row 'sets Data Input table length
+    
+'rAcct is used as table length for all values in table
+
+    For iAcct = 9 To rAcct 'first row to last
+    
+        If wksDI.Range("K" & iAcct).Value <> 0 Then 'skip zeros
+        
+            Vend = wksDI.Range("h" & iAcct).Value 'sets Vendor ID value
+            Acct = wksDI.Range("j" & iAcct).Value 'sets Acct
+            AcctEff = wksDI.Range("k" & iAcct).Value 'sets Acct %
+            
+            PasteValues
+        
+        Else
+        
+        End If
+        
+    Next iAcct ' move to next row
+           
+End Sub
+
+Sub PasteValues()
+
+Set wksDT = ThisWorkbook.Worksheets("Data Table") 'sets worksheet
+
+iPasteValues = iPasteValues + 1 'moves to next row
+
+'pastes all values onto Data Table
+wksDT.Range("B" & iPasteValues) = Acct
+wksDT.Range("C" & iPasteValues) = Vend
+wksDT.Range("D" & iPasteValues) = AcctEff
+wksDT.Range("E" & iPasteValues) = Loc
+wksDT.Range("F" & iPasteValues) = LocEff
+wksDT.Range("G" & iPasteValues) = Dept
+wksDT.Range("H" & iPasteValues) = DeptEff
+
+
+End Sub
+
+Sub FillFormulas()
+
+Set wksDT = ThisWorkbook.Worksheets("Data Table") 'sets worksheet
+
+wksDT.Range("I3").Formula = "=F3*H3"
+'fills first effective formula
+
+wksDT.Range("K3:V3").Formula = "=$J3*'Seasonality'!H$18"
+'fills first row of individual month formulas using Total and Seasonality %
+
+wksDT.Range("J3").Formula = "=I3*D3"
+'gets first row total using Eff % and Total AP on Data Input
+
+wksDT.Range("I3:V" & iPasteValues).FillDown
+
+End Sub
+
+Sub GetCSVValues()
+
+Dim iDTRow As Integer, iDTCol As Integer
+
+Dim iPCSV As Integer
+
+Dim DTValue As String
+
+Dim DeptID As String, LocID As String, VendID As String, AcctID As String
+
+Dim Cur As String, Year As String, DocPre As String, FirstNum As String, TransDate As String
+
+Dim Month As String
+
+Set wksDT = ThisWorkbook.Worksheets("Data Table") 'sets worksheet
+
+Set wksCSV = ThisWorkbook.Worksheets("CSV_File") 'sets CSV worksheet
+
+Set wksAI = ThisWorkbook.Worksheets("Addl_Info") 'sets Addl Info wks
+
+rDTRow = wksDT.Range("J" & Rows.Count).End(xlUp).Row 'get number of rows on DT page
+
+rDTCol = wksDT.Cells(3, wksDT.Columns.Count).End(xlToLeft).Column 'get number of col on DT page
+
+iPCSV = 3 'set CSV Page First Row
+
+Month = 1 'set Jan
+
+FirstNum = wksAI.Range("P9").Value 'set first number in doc seq
+
+DocPre = wksAI.Range("N9").Value ' sets prefix for doc num
+
+NextNum = FirstNum
+
+For iDTRow = 3 To rDTRow 'get number of rows
+
+    LineNo = 1 'starts line number sequence
+    
+    For iDTCol = 11 To rDTCol 'get number of col
+    
+        If wksDT.Cells(iDTRow, iDTCol).Value <> 0 Then 'skip 0 values
+        
+'set CSV row values
+    
+            DTValue = wksDT.Cells(iDTRow, iDTCol).Value 'get amount from table
+            
+            DeptID = wksDT.Range("G" & iDTRow).Value 'get Dept value
+                        
+            LocID = wksDT.Range("E" & iDTRow).Value 'get Loc value
+                
+            AcctID = wksDT.Range("B" & iDTRow).Value 'get Acct value
+            
+            VendID = wksDT.Range("C" & iDTRow).Value 'get Vendor value
+            
+            Cur = wksAI.Range("G9").Value 'get currency
+            
+            Year = wksAI.Range("J9").Value 'get year
+            
+            TransDate = Month & "/28/" & Year
+            
+            BillNo = DocPre & "-" & Format(NextNum, "000")
+            
+            
+            
+            
+            
+'paste CSV values
+            
+            wksCSV.Range("N" & iPCSV) = DTValue 'paste amount into CSV
+                
+            wksCSV.Range("M" & iPCSV) = DeptID 'paste Dept into CSV
+            
+            wksCSV.Range("L" & iPCSV) = LocID 'paste Loc into CSV
+            
+            wksCSV.Range("K" & iPCSV) = AcctID 'paste Acct into CSV
+            
+            wksCSV.Range("C" & iPCSV) = VendID 'paste Vendor into CSV
+            
+            wksCSV.Range("I" & iPCSV) = Cur 'paste currency
+            
+            wksCSV.Range("D" & iPCSV) = TransDate 'paste Posting Date
+            
+            wksCSV.Range("E" & iPCSV) = TransDate 'paste Created Date
+            
+            wksCSV.Range("B" & iPCSV) = BillNo 'paste Bill #
+        
+            
+'temporary CSV fill
+
+            
+            wksCSV.Range("J" & iPCSV) = LineNo 'temp line no
+            
+            wksCSV.Range("N" & iPCSV) = DTValue 'paste amount into CSV
+            
+            End If
+            
+            iPCSV = iPCSV + 1 'next CSV paste line
+            
+            Month = Month + 1 'next month
+            
+            NextNum = NextNum + 1 'next doc number
+                    
+            Next iDTCol 'next month posting amount
+            
+            Month = 1 'resets month counter
+            
+            Next iDTRow 'next line of table
+                       
+            
+
+End Sub
+
+Sub CalcMan()
+
+'makes calc manual
+
+    Application.Calculation = xlCalculationManual
+    Application.ScreenUpdating = False
+    Application.DisplayStatusBar = False
+    Application.EnableEvents = False
+    
+End Sub
+
+Sub CalcAuto()
+
+'makes calc auto
+
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+    Application.DisplayStatusBar = True
+    Application.EnableEvents = True
+    
+End Sub
+
+Sub CopyToCSV()
+
+'copies CSV_File to new page
+
+ThisWorkbook.Sheets("CSV_File").Visible = True 'unhides tab
+
+ThisWorkbook.Sheets("CSV_File").Copy 'makes copy
+
+ThisWorkbook.Sheets("CSV_File").Visible = False 'rehides tab
+
+End Sub
+
+
+
+
+
